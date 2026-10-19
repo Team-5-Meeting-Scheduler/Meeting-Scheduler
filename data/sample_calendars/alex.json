@@ -1,0 +1,32 @@
+[
+    {
+        "person": "Alex",
+        "title": "Team Sync",
+        "start": "2026-10-20T10:00:00",
+        "end": "2026-10-20T11:00:00"
+    },
+    {
+        "person": "Alex",
+        "title": "Morning Work",
+        "start": "2026-10-23T09:00:00",
+        "end": "2026-10-23T11:00:00"
+    },
+    {
+        "person": "Alex",
+        "title": "Project Work",
+        "start": "2026-10-23T11:15:00",
+        "end": "2026-10-23T13:00:00"
+    },
+    {
+        "person": "Alex",
+        "title": "Team Sessions",
+        "start": "2026-10-23T13:00:00",
+        "end": "2026-10-23T15:00:00"
+    },
+    {
+        "person": "Alex",
+        "title": "Afternoon Review",
+        "start": "2026-10-23T15:15:00",
+        "end": "2026-10-23T17:00:00"
+    }
+]
