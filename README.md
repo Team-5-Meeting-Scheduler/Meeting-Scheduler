@@ -29,5 +29,21 @@ reports/                 Generated reports (gitignored)
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+```
+
+## Run tests locally
+
+From the repository root, with the virtual environment activated:
+
+```bash
 pytest
+```
+
+To run one file:
+
+```bash
+pytest tests/test_models.py
+```
+
+GitHub Actions runs `pytest` on every pull request. A failing test fails the workflow.
 ```
