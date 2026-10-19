@@ -1,0 +1,32 @@
+[
+    {
+        "person": "Sam",
+        "title": "Team Standup",
+        "start": "2026-10-20T09:00:00",
+        "end": "2026-10-20T09:30:00"
+    },
+    {
+        "person": "Sam",
+        "title": "Project Review",
+        "start": "2026-10-20T11:00:00",
+        "end": "2026-10-20T12:00:00"
+    },
+    {
+        "person": "Sam",
+        "title": "Sprint Discussion",
+        "start": "2026-10-20T14:00:00",
+        "end": "2026-10-20T15:00:00"
+    },
+    {
+        "person": "Sam",
+        "title": "Planning",
+        "start": "2026-10-21T09:00:00",
+        "end": "2026-10-21T10:00:00"
+    },
+    {
+        "person": "Sam",
+        "title": "Client Call",
+        "start": "2026-10-21T10:00:00",
+        "end": "2026-10-21T11:00:00"
+    }
+]
