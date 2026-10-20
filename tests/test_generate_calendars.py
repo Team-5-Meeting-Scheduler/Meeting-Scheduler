@@ -225,3 +225,138 @@ def test_generator_can_run_twice(generated_files):
     for person, count in EXPECTED_COUNTS.items():
         assert len(read_json(generated_files, person)) == count
         assert len(read_csv(generated_files, person)) == count
+
+
+def fail_mkdir_for(target_dir):
+    """Return a mkdir replacement that fails only for one directory."""
+    original_mkdir = Path.mkdir
+
+    def failing_mkdir(self, *args, **kwargs):
+        if self == target_dir:
+            raise OSError("permission denied")
+        return original_mkdir(self, *args, **kwargs)
+
+    return failing_mkdir
+
+
+def fail_open_for(extension):
+    """Return an open replacement that fails when writing that file type."""
+    original_open = open
+
+    def failing_open(file, mode="r", *args, **kwargs):
+        writing = "w" in str(mode)
+        if writing and str(file).endswith(extension):
+            raise OSError(f"unable to write {file}")
+        return original_open(file, mode, *args, **kwargs)
+
+    return failing_open
+
+
+def assert_failure_is_reported(capsys, error_text, success_text):
+    """The error is shown, and no success line is printed."""
+    captured = capsys.readouterr()
+
+    assert error_text in captured.out
+    assert success_text not in captured.out
+    assert "Created " not in captured.out
+
+
+def test_json_output_directory_creation_failure(tmp_path, monkeypatch, capsys):
+    """JSON generation reports a directory error and raises it again."""
+    output_dir = tmp_path / "json_calendars"
+    monkeypatch.setattr(json_generator, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(Path, "mkdir", fail_mkdir_for(output_dir))
+
+    with pytest.raises(OSError, match="permission denied"):
+        json_generator.generate_json_calendars()
+
+    assert_failure_is_reported(
+        capsys,
+        f"could not create output directory '{output_dir}'",
+        "All JSON calendars generated successfully!",
+    )
+
+
+def test_csv_output_directory_creation_failure(tmp_path, monkeypatch, capsys):
+    """CSV generation reports a directory error and raises it again."""
+    output_dir = tmp_path / "csv_calendars"
+    monkeypatch.setattr(csv_generator, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(Path, "mkdir", fail_mkdir_for(output_dir))
+
+    with pytest.raises(OSError, match="permission denied"):
+        csv_generator.generate_csv_calendars()
+
+    assert_failure_is_reported(
+        capsys,
+        f"could not create output directory '{output_dir}'",
+        "All CSV calendars generated successfully!",
+    )
+
+
+def test_json_file_writing_failure(tmp_path, monkeypatch, capsys):
+    """JSON generation reports a file error and raises it again."""
+    monkeypatch.setattr(json_generator, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("builtins.open", fail_open_for(".json"))
+
+    with pytest.raises(OSError, match="unable to write"):
+        json_generator.generate_json_calendars()
+
+    assert_failure_is_reported(
+        capsys,
+        f"could not write JSON file '{tmp_path / 'sam.json'}'",
+        "All JSON calendars generated successfully!",
+    )
+
+
+def test_csv_file_writing_failure(tmp_path, monkeypatch, capsys):
+    """CSV generation reports a file error and raises it again."""
+    monkeypatch.setattr(csv_generator, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("builtins.open", fail_open_for(".csv"))
+
+    with pytest.raises(OSError, match="unable to write"):
+        csv_generator.generate_csv_calendars()
+
+    assert_failure_is_reported(
+        capsys,
+        f"could not write CSV file '{tmp_path / 'sam.csv'}'",
+        "All CSV calendars generated successfully!",
+    )
+
+
+@pytest.mark.parametrize("error_type", [TypeError, ValueError])
+def test_json_serialization_failure(tmp_path, monkeypatch, capsys, error_type):
+    """JSON serialization errors are reported and raised again."""
+    monkeypatch.setattr(json_generator, "OUTPUT_DIR", tmp_path)
+
+    def fail_dump(*args, **kwargs):
+        raise error_type("calendar data cannot be serialized")
+
+    monkeypatch.setattr(json_generator.json, "dump", fail_dump)
+
+    with pytest.raises(error_type, match="cannot be serialized"):
+        json_generator.generate_json_calendars()
+
+    assert_failure_is_reported(
+        capsys,
+        f"could not serialize JSON for '{tmp_path / 'sam.json'}'",
+        "All JSON calendars generated successfully!",
+    )
+
+
+def test_csv_writing_failure(tmp_path, monkeypatch, capsys):
+    """csv.Error while writing rows is reported and raised again."""
+    monkeypatch.setattr(csv_generator, "OUTPUT_DIR", tmp_path)
+
+    def fail_writerows(self, rows):
+        raise csv.Error("invalid calendar row")
+
+    monkeypatch.setattr(csv.DictWriter, "writerows", fail_writerows)
+
+    with pytest.raises(csv.Error, match="invalid calendar row"):
+        csv_generator.generate_csv_calendars()
+
+    assert_failure_is_reported(
+        capsys,
+        f"could not write CSV rows to '{tmp_path / 'sam.csv'}'",
+        "All CSV calendars generated successfully!",
+    )
