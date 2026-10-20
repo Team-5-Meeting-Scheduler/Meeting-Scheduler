@@ -173,7 +173,14 @@ def generate_json_calendars():
 
     calendars = get_sample_calendars()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # Creating the folder can fail if the path is not writable.
+    try:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        print(
+            f"Error: could not create output directory '{OUTPUT_DIR}': {error}"
+        )
+        raise
 
     for person, events in calendars.items():
         file_path = OUTPUT_DIR / f"{person}.json"
@@ -181,8 +188,17 @@ def generate_json_calendars():
         # Keep events ordered by their starting time.
         events = sorted(events, key=lambda event: event["start"])
 
-        with open(file_path, "w", encoding="utf-8") as file:
-            json.dump(events, file, indent=4)
+        try:
+            with open(file_path, "w", encoding="utf-8") as file:
+                json.dump(events, file, indent=4)
+        except OSError as error:
+            print(f"Error: could not write JSON file '{file_path}': {error}")
+            raise
+        except (TypeError, ValueError) as error:
+            print(
+                f"Error: could not serialize JSON for '{file_path}': {error}"
+            )
+            raise
 
         print(f"Created {file_path.name} ({len(events)} events)")
 

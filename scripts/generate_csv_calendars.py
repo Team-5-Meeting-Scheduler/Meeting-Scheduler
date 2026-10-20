@@ -13,21 +13,37 @@ def generate_csv_calendars():
 
     calendars = get_sample_calendars()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # Creating the folder can fail if the path is not writable.
+    try:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        print(
+            f"Error: could not create output directory '{OUTPUT_DIR}': {error}"
+        )
+        raise
 
     for person, events in calendars.items():
         file_path = OUTPUT_DIR / f"{person}.csv"
 
         events = sorted(events, key=lambda event: event["start"])
 
-        with open(file_path, "w", newline="", encoding="utf-8") as file:
-            writer = csv.DictWriter(
-                file,
-                fieldnames=["person", "title", "start", "end"],
-            )
+        try:
+            with open(file_path, "w", newline="", encoding="utf-8") as file:
+                writer = csv.DictWriter(
+                    file,
+                    fieldnames=["person", "title", "start", "end"],
+                )
 
-            writer.writeheader()
-            writer.writerows(events)
+                writer.writeheader()
+                writer.writerows(events)
+        except OSError as error:
+            print(f"Error: could not write CSV file '{file_path}': {error}")
+            raise
+        except csv.Error as error:
+            print(
+                f"Error: could not write CSV rows to '{file_path}': {error}"
+            )
+            raise
 
         print(f"Created {file_path.name} ({len(events)} events)")
 
