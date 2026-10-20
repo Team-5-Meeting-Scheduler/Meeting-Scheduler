@@ -44,14 +44,12 @@ def find_available_slots(
     allows a meeting that only touches a busy interval. Time is O(n log n)
     to merge busy intervals plus O(c * (b + n)) to test candidates.
     """
-    if (
-        isinstance(duration_minutes, bool)
-        or not isinstance(duration_minutes, int)
-        or duration_minutes <= 0
-    ):
-        raise ValueError("Meeting duration must be a positive number of minutes.")
-    if not participants:
-        raise ValueError("At least one participant is required.")
+    _require_events(events)
+    _require_duration(duration_minutes)
+    _require_participants(participants)
+    _require_meeting_date(meeting_date)
+    _require_rules(rules)
+    _require_known_participants(known_participants)
 
     requested = list(dict.fromkeys(participants))
     known = (
@@ -93,6 +91,52 @@ def find_available_slots(
             slots.append(TimeSlot(start=candidate, end=candidate_end))
         candidate += SLOT_INCREMENT
     return slots
+
+
+def _require_events(events: list[Event]) -> None:
+    if not isinstance(events, list):
+        raise TypeError("Events must be a list.")
+    if any(not isinstance(event, Event) for event in events):
+        raise TypeError("Events must contain Event values.")
+
+
+def _require_duration(duration_minutes: int) -> None:
+    if (
+        isinstance(duration_minutes, bool)
+        or not isinstance(duration_minutes, int)
+        or duration_minutes <= 0
+    ):
+        raise ValueError("Meeting duration must be a positive number of minutes.")
+
+
+def _require_participants(participants: list[str]) -> None:
+    if not isinstance(participants, list) or not participants:
+        raise ValueError("At least one participant is required.")
+    if any(not isinstance(person, str) or not person.strip() for person in participants):
+        raise ValueError("Participant names must be non-empty strings.")
+
+
+def _require_meeting_date(meeting_date: date) -> None:
+    if type(meeting_date) is not date:
+        raise ValueError("Meeting date must be a calendar date.")
+
+
+def _require_rules(rules: list[SchedulingRule] | None) -> None:
+    if rules is None:
+        return
+    if not isinstance(rules, list) or any(
+        not isinstance(rule, SchedulingRule) for rule in rules
+    ):
+        raise TypeError("Rules must be a list of SchedulingRule objects.")
+
+
+def _require_known_participants(known_participants: set[str] | None) -> None:
+    if known_participants is None:
+        return
+    if not isinstance(known_participants, set) or any(
+        not isinstance(person, str) or not person.strip() for person in known_participants
+    ):
+        raise TypeError("Known participants must be a set of non-empty strings.")
 
 
 def _overlaps_busy(

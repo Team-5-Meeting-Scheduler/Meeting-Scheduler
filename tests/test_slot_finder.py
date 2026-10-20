@@ -30,153 +30,208 @@ def slot(start: str, end: str) -> TimeSlot:
     return TimeSlot(start=at(start), end=at(end))
 
 
-def find(events, participants, duration=30, rules=None, known=None):
+def find(events, participants, duration=30, rules=None, known=None, meeting_date=MEETING_DATE):
     return find_available_slots(
         events,
         participants,
-        MEETING_DATE,
+        meeting_date,
         duration,
         rules=rules,
         known_participants=PEOPLE if known is None else known,
     )
 
 
-def test_all_participants_free_covers_the_working_day():
-    slots = find([], ["Sam", "Priya", "Alex"], duration=30)
-    assert slots[0] == slot("09:00", "09:30")
-    assert slots[-1] == slot("16:30", "17:00")
-    assert all(
-        current.end - current.start == timedelta(minutes=30) for current in slots
-    )
-    assert len(slots) == 31
-
-
-def test_one_participant_meeting_blocks_that_interval():
-    slots = find([event("09:00", "10:00")], ["Sam"], duration=60)
-    assert slot("09:00", "10:00") not in slots
-    assert slot("10:00", "11:00") in slots
-    assert slots[0] == slot("10:00", "11:00")
-
-
-def test_different_busy_intervals_require_everyone_free():
-    events = [
+def shared_events():
+    return [
         event("09:00", "10:00", "Sam"),
         event("13:00", "14:00", "Sam"),
         event("10:00", "11:00", "Priya"),
         event("14:00", "15:00", "Priya"),
         event("11:00", "12:00", "Alex"),
     ]
-    slots = find(events, ["Sam", "Priya", "Alex"], duration=60)
-    assert slots[0] == slot("12:00", "13:00")
-    assert slot("15:00", "16:00") in slots
-    assert slot("09:00", "10:00") not in slots
-    assert slot("10:00", "11:00") not in slots
-    assert slot("13:00", "14:00") not in slots
 
 
-def test_no_shared_slot_returns_empty_list():
-    events = [
-        event("09:00", "13:00", "Sam"),
-        event("13:00", "17:00", "Priya"),
-    ]
-    assert find(events, ["Sam", "Priya"], duration=30) == []
-
-
-def test_completely_full_working_day():
-    assert find([event("09:00", "17:00")], ["Sam"], duration=15) == []
-
-
-def test_back_to_back_meetings_allow_a_touching_slot():
-    events = [
-        event("09:00", "10:00", "Sam"),
-        event("10:00", "11:00", "Priya"),
-    ]
-    slots = find(events, ["Sam", "Priya"], duration=30)
-    assert slots[0] == slot("11:00", "11:30")
-    assert slot("09:30", "10:00") not in slots
-
-
-def test_duration_longer_than_the_gap_is_rejected():
-    events = [
+def gap_events():
+    return [
         event("09:00", "12:00", "Sam"),
         event("12:30", "17:00", "Sam"),
     ]
-    slots = find(events, ["Sam"], duration=45)
-    assert slots == []
-    shorter = find(events, ["Sam"], duration=30)
-    assert shorter == [slot("12:00", "12:30")]
 
 
-def test_meeting_can_start_at_opening():
-    slots = find([], ["Sam"], duration=15)
-    assert slots[0] == slot("09:00", "09:15")
-
-
-def test_meeting_can_end_at_closing():
-    slots = find([], ["Sam"], duration=30)
-    assert slots[-1] == slot("16:30", "17:00")
-
-
-def test_meeting_that_would_pass_closing_is_excluded():
-    slots = find([event("09:00", "16:00")], ["Sam"], duration=90)
-    assert slots == []
-    assert all(item.end <= at("17:00") for item in find([], ["Sam"], duration=90))
-
-
-def test_empty_calendars_are_free_when_people_are_known():
-    slots = find([], ["Sam", "Priya"], duration=480, known={"Sam", "Priya"})
-    assert slots == [slot("09:00", "17:00")]
-
-
-def test_unsorted_events_do_not_change_results():
-    ordered = [
-        event("09:00", "10:00", "Sam", "Standup"),
-        event("15:00", "16:00", "Priya", "Review"),
-    ]
-    shuffled = list(reversed(ordered))
-    assert find(ordered, ["Sam", "Priya"]) == find(shuffled, ["Sam", "Priya"])
-
-
-def test_overlapping_busy_intervals_are_merged():
-    events = [
+def overlap_events():
+    return [
         event("10:00", "12:00", "Sam", "A"),
         event("11:00", "13:00", "Sam", "B"),
         event("11:30", "12:30", "Priya", "C"),
     ]
-    slots = find(events, ["Sam", "Priya"], duration=60)
-    assert slot("09:00", "10:00") in slots
-    assert slot("10:00", "11:00") not in slots
-    assert slot("12:00", "13:00") not in slots
-    assert slots[0] == slot("09:00", "10:00")
-    assert slot("13:00", "14:00") in slots
 
 
-def test_nonzero_minimum_gap_blocks_nearby_slots():
-    rules = [WorkingHoursRule(), MinimumGapRule(timedelta(minutes=15))]
-    slots = find(
-        [event("10:00", "11:00")],
-        ["Sam"],
-        duration=30,
-        rules=rules,
-    )
-    assert slot("09:30", "10:00") not in slots
-    assert slot("09:15", "09:45") in slots
-    assert slot("09:00", "09:30") in slots
-    assert slot("11:00", "11:30") not in slots
-    assert slot("11:15", "11:45") in slots
+def gap_rules():
+    return [WorkingHoursRule(), MinimumGapRule(timedelta(minutes=15))]
 
 
-def test_default_rules_allow_back_to_back():
-    slots = find([event("10:00", "11:00")], ["Sam"], duration=30, rules=None)
-    assert slot("09:30", "10:00") in slots
-    assert slot("11:00", "11:30") in slots
+def test_free_day_starts_at_opening():
+    assert find([], ["Sam", "Priya", "Alex"])[0] == slot("09:00", "09:30")
 
 
-def test_invalid_duration_raises():
+def test_free_day_ends_at_closing():
+    assert find([], ["Sam", "Priya", "Alex"])[-1] == slot("16:30", "17:00")
+
+
+def test_free_day_slot_count_for_thirty_minutes():
+    assert len(find([], ["Sam"], duration=30)) == 31
+
+
+def test_free_day_slots_use_the_requested_duration():
+    slots = find([], ["Sam"], duration=30)
+    assert all(item.end - item.start == timedelta(minutes=30) for item in slots)
+
+
+def test_busy_interval_is_not_offered():
+    assert slot("09:00", "10:00") not in find([event("09:00", "10:00")], ["Sam"], duration=60)
+
+
+def test_slot_can_start_when_a_meeting_ends():
+    assert slot("10:00", "11:00") in find([event("09:00", "10:00")], ["Sam"], duration=60)
+
+
+def test_first_slot_follows_one_participants_meeting():
+    assert find([event("09:00", "10:00")], ["Sam"], duration=60)[0] == slot("10:00", "11:00")
+
+
+def test_shared_gap_starts_at_noon():
+    assert find(shared_events(), ["Sam", "Priya", "Alex"], duration=60)[0] == slot("12:00", "13:00")
+
+
+def test_later_shared_hour_is_available():
+    assert slot("15:00", "16:00") in find(shared_events(), ["Sam", "Priya", "Alex"], duration=60)
+
+
+def test_sam_morning_is_not_shared():
+    assert slot("09:00", "10:00") not in find(shared_events(), ["Sam", "Priya", "Alex"], duration=60)
+
+
+def test_priya_morning_is_not_shared():
+    assert slot("10:00", "11:00") not in find(shared_events(), ["Sam", "Priya", "Alex"], duration=60)
+
+
+def test_sam_afternoon_is_not_shared():
+    assert slot("13:00", "14:00") not in find(shared_events(), ["Sam", "Priya", "Alex"], duration=60)
+
+
+def test_no_shared_slot_returns_empty_list():
+    events = [event("09:00", "13:00", "Sam"), event("13:00", "17:00", "Priya")]
+    assert find(events, ["Sam", "Priya"]) == []
+
+
+def test_completely_full_working_day_returns_empty_list():
+    assert find([event("09:00", "17:00")], ["Sam"], duration=15) == []
+
+
+def test_back_to_back_meetings_allow_the_following_slot():
+    events = [event("09:00", "10:00", "Sam"), event("10:00", "11:00", "Priya")]
+    assert find(events, ["Sam", "Priya"])[0] == slot("11:00", "11:30")
+
+
+def test_back_to_back_meetings_reject_an_overlapping_slot():
+    events = [event("09:00", "10:00", "Sam"), event("10:00", "11:00", "Priya")]
+    assert slot("09:30", "10:00") not in find(events, ["Sam", "Priya"])
+
+
+def test_duration_longer_than_the_gap_returns_empty_list():
+    assert find(gap_events(), ["Sam"], duration=45) == []
+
+
+def test_duration_that_fits_the_gap_returns_that_slot():
+    assert find(gap_events(), ["Sam"], duration=30) == [slot("12:00", "12:30")]
+
+
+def test_meeting_can_start_at_opening():
+    assert find([], ["Sam"], duration=15)[0] == slot("09:00", "09:15")
+
+
+def test_meeting_can_end_at_closing():
+    assert find([], ["Sam"])[-1] == slot("16:30", "17:00")
+
+
+def test_slot_that_would_pass_closing_is_excluded():
+    assert find([event("09:00", "16:00")], ["Sam"], duration=90) == []
+
+
+def test_longest_free_slot_ends_at_closing():
+    assert find([], ["Sam"], duration=90)[-1] == slot("15:30", "17:00")
+
+
+def test_empty_known_calendars_allow_the_full_day():
+    assert find([], ["Sam", "Priya"], duration=480, known={"Sam", "Priya"}) == [
+        slot("09:00", "17:00")
+    ]
+
+
+def test_unsorted_events_return_the_same_slots():
+    ordered = [event("09:00", "10:00", "Sam"), event("15:00", "16:00", "Priya")]
+    assert find(ordered, ["Sam", "Priya"]) == find(list(reversed(ordered)), ["Sam", "Priya"])
+
+
+def test_overlapping_busy_time_still_allows_the_opening_hour():
+    assert slot("09:00", "10:00") in find(overlap_events(), ["Sam", "Priya"], duration=60)
+
+
+def test_overlapping_busy_time_blocks_the_merged_interval():
+    assert slot("11:00", "12:00") not in find(overlap_events(), ["Sam", "Priya"], duration=60)
+
+
+def test_slot_after_merged_busy_time_is_available():
+    assert slot("13:00", "14:00") in find(overlap_events(), ["Sam", "Priya"], duration=60)
+
+
+def test_minimum_gap_rejects_a_touching_slot_before_the_meeting():
+    assert slot("09:30", "10:00") not in find([event("10:00", "11:00")], ["Sam"], rules=gap_rules())
+
+
+def test_minimum_gap_allows_an_exact_gap_before_the_meeting():
+    assert slot("09:15", "09:45") in find([event("10:00", "11:00")], ["Sam"], rules=gap_rules())
+
+
+def test_minimum_gap_rejects_a_touching_slot_after_the_meeting():
+    assert slot("11:00", "11:30") not in find([event("10:00", "11:00")], ["Sam"], rules=gap_rules())
+
+
+def test_minimum_gap_allows_an_exact_gap_after_the_meeting():
+    assert slot("11:15", "11:45") in find([event("10:00", "11:00")], ["Sam"], rules=gap_rules())
+
+
+def test_default_rules_allow_a_slot_that_ends_when_a_meeting_starts():
+    assert slot("09:30", "10:00") in find([event("10:00", "11:00")], ["Sam"])
+
+
+def test_default_rules_allow_a_slot_that_starts_when_a_meeting_ends():
+    assert slot("11:00", "11:30") in find([event("10:00", "11:00")], ["Sam"])
+
+
+def test_zero_duration_raises():
     with pytest.raises(ValueError, match="positive"):
         find([], ["Sam"], duration=0)
+
+
+def test_negative_duration_raises():
     with pytest.raises(ValueError, match="positive"):
         find([], ["Sam"], duration=-15)
+
+
+def test_boolean_duration_raises():
+    with pytest.raises(ValueError, match="positive"):
+        find([], ["Sam"], duration=True)
+
+
+def test_empty_participant_list_raises():
+    with pytest.raises(ValueError, match="participant"):
+        find([], [])
+
+
+def test_blank_participant_name_raises():
+    with pytest.raises(ValueError, match="non-empty"):
+        find([], [" "])
 
 
 def test_unknown_participant_raises():
@@ -184,19 +239,52 @@ def test_unknown_participant_raises():
         find([event("09:00", "10:00", "Sam")], ["Sam", "Alex"], known={"Sam"})
 
 
-def test_slots_are_ordered_and_repeatable():
+def test_datetime_meeting_date_raises():
+    with pytest.raises(ValueError, match="calendar date"):
+        find([], ["Sam"], meeting_date=at("09:00"))
+
+
+def test_non_event_entry_raises():
+    with pytest.raises(TypeError, match="Event"):
+        find(["09:00-10:00"], ["Sam"])
+
+
+def test_non_rule_entry_raises():
+    with pytest.raises(TypeError, match="SchedulingRule"):
+        find([], ["Sam"], rules=["working hours"])
+
+
+def test_known_participants_must_be_a_set():
+    with pytest.raises(TypeError, match="Known participants"):
+        find([], ["Sam"], known=["Sam"])
+
+
+def test_participant_order_does_not_change_slots():
     events = [event("12:00", "13:00", "Priya"), event("09:00", "09:30", "Alex")]
-    first = find(events, ["Alex", "Priya", "Sam"])
-    second = find(events, ["Sam", "Priya", "Alex"])
-    assert first == second
-    assert first == sorted(first, key=lambda item: item.start)
-    assert all(
-        item.start.minute % 15 == 0 and item.start.second == 0 for item in first
-    )
+    assert find(events, ["Alex", "Priya", "Sam"]) == find(events, ["Sam", "Priya", "Alex"])
 
 
-def test_events_on_another_day_are_ignored():
+def test_slots_are_chronological():
+    events = [event("12:00", "13:00", "Priya"), event("09:00", "09:30", "Alex")]
+    slots = find(events, ["Sam", "Priya", "Alex"])
+    assert slots == sorted(slots, key=lambda item: item.start)
+
+
+def test_slot_starts_are_on_fifteen_minute_boundaries():
+    slots = find([event("09:07", "09:20")], ["Sam"], duration=15)
+    assert all(item.start.minute % 15 == 0 and item.start.second == 0 for item in slots)
+
+
+def test_events_on_another_day_do_not_block_the_requested_date():
     other = event("09:00", "17:00", "Sam", day=date(2026, 10, 24))
-    slots = find([other], ["Sam"], duration=30)
-    assert slots[0] == slot("09:00", "09:30")
-    assert len(slots) == 31
+    assert find([other], ["Sam"])[0] == slot("09:00", "09:30")
+
+
+def test_unselected_person_does_not_block_the_slot():
+    assert slot("09:00", "09:30") in find([event("09:00", "10:00", "Priya")], ["Sam"])
+
+
+def test_duplicate_participant_names_are_ignored():
+    assert find([event("10:00", "11:00")], ["Sam", "Sam"]) == find(
+        [event("10:00", "11:00")], ["Sam"]
+    )
