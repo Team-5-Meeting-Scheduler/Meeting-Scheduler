@@ -239,6 +239,42 @@ def test_unknown_participant_raises():
         find([event("09:00", "10:00", "Sam")], ["Sam", "Alex"], known={"Sam"})
 
 
+def test_unknown_participant_raises_when_known_set_is_omitted():
+    with pytest.raises(ValueError, match="Alex"):
+        find_available_slots(
+            [event("09:00", "10:00", "Sam")],
+            ["Alex"],
+            MEETING_DATE,
+            30,
+        )
+
+
+def test_all_attendees_must_be_free_for_a_shared_slot():
+    events = [
+        event("09:00", "09:30", "Sam"),
+        event("09:15", "09:45", "Priya"),
+    ]
+    assert slot("09:00", "09:30") not in find(events, ["Sam", "Priya"])
+
+
+def test_shared_slot_exists_when_every_attendee_is_free():
+    events = [
+        event("09:00", "09:30", "Sam"),
+        event("09:15", "09:45", "Priya"),
+    ]
+    assert slot("09:45", "10:15") in find(events, ["Sam", "Priya"])
+
+
+def test_slot_starting_before_opening_is_never_returned():
+    slots = find([], ["Sam"], duration=30)
+    assert all(item.start.time() >= at("09:00").time() for item in slots)
+
+
+def test_slot_ending_after_closing_is_never_returned():
+    slots = find([], ["Sam"], duration=30)
+    assert all(item.end.time() <= at("17:00").time() for item in slots)
+
+
 def test_datetime_meeting_date_raises():
     with pytest.raises(ValueError, match="calendar date"):
         find([], ["Sam"], meeting_date=at("09:00"))
