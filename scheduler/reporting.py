@@ -78,11 +78,13 @@ def write_report(report: str, output_path: str | Path) -> None:
 
 
 def _require_meeting_date(meeting_date: date) -> None:
+    """Reject values that are not a plain calendar date."""
     if type(meeting_date) is not date:
         raise ValueError("Meeting date must be a calendar date.")
 
 
 def _require_participants(participants: list[str]) -> None:
+    """Reject an empty participant list or blank names."""
     if not isinstance(participants, list) or not participants:
         raise ValueError("At least one participant is required.")
     if any(not isinstance(person, str) or not person.strip() for person in participants):
@@ -90,6 +92,7 @@ def _require_participants(participants: list[str]) -> None:
 
 
 def _require_duration(duration_minutes: int) -> None:
+    """Reject non-positive or non-integer durations."""
     if (
         isinstance(duration_minutes, bool)
         or not isinstance(duration_minutes, int)
@@ -99,6 +102,7 @@ def _require_duration(duration_minutes: int) -> None:
 
 
 def _require_records(records: list, label: str, record_type: type) -> None:
+    """Reject lists that are not homogeneous typed records."""
     if not isinstance(records, list):
         raise TypeError(f"{label} must be a list.")
     if any(not isinstance(record, record_type) for record in records):
@@ -106,6 +110,7 @@ def _require_records(records: list, label: str, record_type: type) -> None:
 
 
 def _conflict_section(conflicts: list[Conflict]) -> str:
+    """Format the calendar-conflicts section of the report."""
     if not conflicts:
         return "No calendar conflicts.\n"
 
@@ -129,6 +134,7 @@ def _conflict_section(conflicts: list[Conflict]) -> str:
 
 
 def _slot_section(slots: list[TimeSlot]) -> str:
+    """Format the suggested-meeting-times section of the report."""
     if not slots:
         return "No shared meeting time is available.\n"
     lines = [
@@ -139,8 +145,10 @@ def _slot_section(slots: list[TimeSlot]) -> str:
 
 
 def _event_line(event) -> str:
+    """Format one event as `title: HH:MM-HH:MM`."""
     return f"{event.title}: {_clock(event.start)}-{_clock(event.end)}"
 
 
 def _clock(moment: datetime) -> str:
+    """Format a datetime as a 24-hour clock time."""
     return moment.strftime("%H:%M")

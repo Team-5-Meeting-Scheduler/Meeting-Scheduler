@@ -94,6 +94,7 @@ def find_available_slots(
 
 
 def _require_events(events: list[Event]) -> None:
+    """Reject a non-list or non-Event collection."""
     if not isinstance(events, list):
         raise TypeError("Events must be a list.")
     if any(not isinstance(event, Event) for event in events):
@@ -101,6 +102,7 @@ def _require_events(events: list[Event]) -> None:
 
 
 def _require_duration(duration_minutes: int) -> None:
+    """Reject non-positive or non-integer durations."""
     if (
         isinstance(duration_minutes, bool)
         or not isinstance(duration_minutes, int)
@@ -110,6 +112,7 @@ def _require_duration(duration_minutes: int) -> None:
 
 
 def _require_participants(participants: list[str]) -> None:
+    """Reject an empty participant list or blank names."""
     if not isinstance(participants, list) or not participants:
         raise ValueError("At least one participant is required.")
     if any(not isinstance(person, str) or not person.strip() for person in participants):
@@ -117,11 +120,13 @@ def _require_participants(participants: list[str]) -> None:
 
 
 def _require_meeting_date(meeting_date: date) -> None:
+    """Reject values that are not a plain calendar date."""
     if type(meeting_date) is not date:
         raise ValueError("Meeting date must be a calendar date.")
 
 
 def _require_rules(rules: list[SchedulingRule] | None) -> None:
+    """Reject a rules argument that is not a list of SchedulingRule objects."""
     if rules is None:
         return
     if not isinstance(rules, list) or any(
@@ -131,6 +136,7 @@ def _require_rules(rules: list[SchedulingRule] | None) -> None:
 
 
 def _require_known_participants(known_participants: set[str] | None) -> None:
+    """Reject a known-participant set that is not a set of non-empty names."""
     if known_participants is None:
         return
     if not isinstance(known_participants, set) or any(

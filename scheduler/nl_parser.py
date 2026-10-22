@@ -114,6 +114,7 @@ def _ask_model(
     reference_date: date,
     client,
 ) -> str:
+    """Call the LLM (or an injected client) and return its text response."""
     openai_client = client or _build_client()
     prompt = _build_prompt(request_text, known_participants, reference_date)
     try:
@@ -130,6 +131,7 @@ def _ask_model(
 
 
 def _build_client():
+    """Build an OpenAI client from environment settings."""
     api_key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip() or api_key.strip() == "<your-api-key>":
         raise RuntimeError(
@@ -156,6 +158,7 @@ def _build_client():
 
 
 def _deployment_name() -> str:
+    """Return the configured Azure OpenAI deployment or model name."""
     deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT") or os.getenv("OPENAI_MODEL")
     if not deployment or not deployment.strip():
         raise RuntimeError(
@@ -168,6 +171,7 @@ def _deployment_name() -> str:
 def _build_prompt(
     request_text: str, known_participants: list[str], reference_date: date
 ) -> str:
+    """Build the JSON-extraction prompt for the scheduling request."""
     people = ", ".join(known_participants) if known_participants else "(none provided)"
     return (
         "Convert the office manager's scheduling request into JSON only.\n"
@@ -186,6 +190,7 @@ def _build_prompt(
 
 
 def _response_text(response) -> str:
+    """Extract plain text from an OpenAI responses API result."""
     direct = getattr(response, "output_text", None)
     if isinstance(direct, str) and direct.strip():
         return direct
@@ -213,6 +218,7 @@ def _response_text(response) -> str:
 
 
 def _parse_json_object(raw: str) -> dict:
+    """Parse a JSON object from model output, including fenced markdown."""
     text = raw.strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
     if fenced:
@@ -233,6 +239,7 @@ def _parse_json_object(raw: str) -> dict:
 
 
 def _validated_request(payload: dict) -> ParsedSchedulingRequest:
+    """Validate and normalize a parsed scheduling JSON object."""
     participants = payload.get("participants")
     if not isinstance(participants, list) or not participants:
         raise ValueError("Parsed request must include at least one participant.")
