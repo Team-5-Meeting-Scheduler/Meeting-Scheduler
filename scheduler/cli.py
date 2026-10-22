@@ -123,6 +123,7 @@ def run(args: argparse.Namespace) -> None:
 
 
 def _validate_mode(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Require typed scheduling flags unless --request is provided."""
     if args.request:
         return
     missing = []
@@ -142,6 +143,7 @@ def _validate_mode(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
 def _resolve_request(
     args: argparse.Namespace, known_participants: set[str]
 ) -> tuple[date, list[str], int, str | None]:
+    """Resolve date, participants, duration, and optional time preference."""
     if not args.request:
         return (
             args.date,
@@ -176,6 +178,7 @@ def _resolve_request(
 
 
 def _parse_date(value: str) -> date:
+    """Parse a YYYY-MM-DD date for argparse."""
     try:
         return date.fromisoformat(value)
     except ValueError as error:
@@ -185,6 +188,7 @@ def _parse_date(value: str) -> date:
 
 
 def _parse_duration(value: str) -> int:
+    """Parse a positive meeting duration in minutes for argparse."""
     try:
         duration = int(value)
     except ValueError as error:
