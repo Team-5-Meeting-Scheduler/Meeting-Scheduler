@@ -41,7 +41,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--input-dir",
         required=True,
-        help="Directory containing JSON or CSV calendar files.",
+        help="Directory containing JSON, CSV, or ICS calendar files.",
+    )
+    parser.add_argument(
+        "--timezone",
+        help="Agreed IANA time zone for zoned ICS import, e.g. America/New_York.",
     )
     parser.add_argument(
         "--date",
@@ -71,7 +75,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def run(args: argparse.Namespace) -> None:
     """Execute loading, conflict detection, slot finding, and reporting."""
-    events, known_participants = _load_input_directory(Path(args.input_dir))
+    events, known_participants = _load_input_directory(
+        Path(args.input_dir), local_timezone=args.timezone
+    )
     participants = list(dict.fromkeys(args.participants))
 
     slots = find_available_slots(
@@ -122,7 +128,9 @@ def _parse_duration(value: str) -> int:
     return duration
 
 
-def _load_input_directory(input_dir: Path) -> tuple[list[Event], set[str]]:
+def _load_input_directory(
+    input_dir: Path, *, local_timezone: str | None = None
+) -> tuple[list[Event], set[str]]:
     """Load calendars from a directory and the set of known people."""
     if not input_dir.exists():
         raise FileNotFoundError(f"Input directory not found: '{input_dir}'.")
@@ -132,13 +140,13 @@ def _load_input_directory(input_dir: Path) -> tuple[list[Event], set[str]]:
     calendar_paths = _calendar_paths(input_dir)
     if not calendar_paths:
         raise ValueError(
-            f"No calendar files found in '{input_dir}'. Use .json or .csv."
+            f"No calendar files found in '{input_dir}'. Use .json, .csv, or .ics."
         )
 
     events: list[Event] = []
     known_participants: set[str] = set()
     for path in calendar_paths:
-        file_events = load_calendars([path])
+        file_events = load_calendars([path], local_timezone=local_timezone)
         events.extend(file_events)
         if file_events:
             known_participants.update(event.person for event in file_events)
@@ -148,15 +156,21 @@ def _load_input_directory(input_dir: Path) -> tuple[list[Event], set[str]]:
 
 
 def _calendar_paths(input_dir: Path) -> list[Path]:
-    """Return calendar files, preferring JSON when a CSV twin exists."""
+    """Return calendars once per stem, preferring JSON, then CSV, then ICS."""
     json_files = {path.stem: path for path in sorted(input_dir.glob("*.json"))}
     csv_files = {path.stem: path for path in sorted(input_dir.glob("*.csv"))}
+    ics_files = {
+        path.stem: path for path in sorted(input_dir.iterdir())
+        if path.is_file() and path.suffix.lower() == ".ics"
+    }
     paths: list[Path] = []
-    for stem in sorted(set(json_files) | set(csv_files)):
+    for stem in sorted(set(json_files) | set(csv_files) | set(ics_files)):
         if stem in json_files:
             paths.append(json_files[stem])
-        else:
+        elif stem in csv_files:
             paths.append(csv_files[stem])
+        else:
+            paths.append(ics_files[stem])
     return paths
 
 

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Find a meeting time that works across participant calendars."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["icalendar>=6,<8"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

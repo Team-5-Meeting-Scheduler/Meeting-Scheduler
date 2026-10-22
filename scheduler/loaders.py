@@ -1,10 +1,11 @@
-"""Load JSON and CSV calendars into Event objects. Owner: Harshitha."""
+"""Load JSON, CSV, and ICS calendars into Event objects. Owner: Harshitha."""
 
 import csv
 import json
 from datetime import datetime
 from pathlib import Path
 
+from scheduler.ics import parse_ics_events
 from scheduler.models import Event
 
 
@@ -94,26 +95,55 @@ def load_csv_calendar(path: str | Path) -> list[Event]:
     return events
 
 
-def load_calendars(paths: list[str | Path]) -> list[Event]:
-    """Load JSON and CSV calendars into one list, in path order."""
+def load_ics_calendar(
+    path: str | Path, person: str | None = None, *, local_timezone: str | None = None
+) -> list[Event]:
+    """Load basic ICS events for one calendar owner.
+
+    Supply person for an exact name; otherwise use the filename stem with its
+    first letter capitalized, matching the CLI's empty-calendar convention.
+    Zoned ICS timestamps require the team's explicit IANA local_timezone.
+    """
+    file_path = _existing_file(path)
+    owner = (
+        person if person is not None
+        else file_path.stem[:1].upper() + file_path.stem[1:]
+    )
+    try:
+        return parse_ics_events(
+            _read_text(file_path), owner, local_timezone=local_timezone
+        )
+    except ValueError as error:
+        raise ValueError(f"Invalid ICS calendar '{file_path}': {error}") from error
+
+
+def load_calendars(
+    paths: list[str | Path], *, local_timezone: str | None = None
+) -> list[Event]:
+    """Load JSON, CSV, and ICS calendars in path order.
+
+    ICS owners come from filenames; local_timezone applies only to ICS import.
+    """
     events: list[Event] = []
     for path in paths:
-        events.extend(_load_file(path))
+        events.extend(_load_file(path, local_timezone=local_timezone))
     return events
 
 
-def _load_file(path: str | Path) -> list[Event]:
+def _load_file(path: str | Path, *, local_timezone: str | None = None) -> list[Event]:
     file_path = Path(path)
     suffix = file_path.suffix.lower()
     if suffix == ".json":
         return load_json_calendar(file_path)
     if suffix == ".csv":
         return load_csv_calendar(file_path)
+    if suffix == ".ics":
+        return load_ics_calendar(file_path, local_timezone=local_timezone)
 
     extension = suffix or "(none)"
     raise ValueError(
         f"Unsupported calendar file extension '{extension}' "
-        f"for '{file_path}'. Use .json or .csv."
+        f"for '{file_path}'. Use .json, .csv, or .ics."
     )
 
 
