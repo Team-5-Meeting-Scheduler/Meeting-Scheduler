@@ -118,6 +118,7 @@ def run(args: argparse.Namespace) -> None:
         slots,
     )
     write_report(report, args.output)
+    print(report, end="")
     print(f"Report written to {args.output}")
 
 

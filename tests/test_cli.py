@@ -115,6 +115,52 @@ def test_main_prints_the_output_path(tmp_path, capsys):
     assert f"Report written to {output}" in capsys.readouterr().out
 
 
+def test_main_prints_the_report_for_json_calendars(tmp_path, capsys):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+
+    main(argv(calendars, output))
+
+    assert "MEETING SCHEDULER REPORT" in capsys.readouterr().out
+
+
+def test_main_prints_the_report_for_csv_calendars(tmp_path, capsys):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    (calendars / "sam.csv").write_text("person,title,start,end\n", encoding="utf-8")
+    (calendars / "priya.csv").write_text("person,title,start,end\n", encoding="utf-8")
+    output = tmp_path / "report.txt"
+
+    main(argv(calendars, output))
+
+    assert "MEETING SCHEDULER REPORT" in capsys.readouterr().out
+
+
+def test_main_prints_the_report_for_ics_calendars(tmp_path, capsys):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    ics = (
+        "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Scheduler tests//EN\n"
+        "BEGIN:VEVENT\nUID:1\nSUMMARY:Standup\n"
+        "DTSTART:20261023T090000\nDTEND:20261023T093000\nEND:VEVENT\n"
+        "END:VCALENDAR\n"
+    )
+    (calendars / "sam.ics").write_text(ics, encoding="utf-8")
+    (calendars / "priya.ics").write_text(
+        "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Scheduler tests//EN\n"
+        "END:VCALENDAR\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "report.txt"
+
+    main(argv(calendars, output))
+
+    assert "MEETING SCHEDULER REPORT" in capsys.readouterr().out
+
+
 def test_report_includes_the_requested_date(tmp_path):
     calendars = tmp_path / "calendars"
     calendars.mkdir()
