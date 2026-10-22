@@ -291,3 +291,416 @@ def test_run_creates_a_missing_output_directory(tmp_path):
     run(args)
 
     assert output.is_file()
+
+
+def test_typed_cli_still_requires_date_without_request(tmp_path):
+    with pytest.raises(SystemExit):
+        parse_args(
+            [
+                "--input-dir",
+                str(tmp_path),
+                "--participants",
+                "Sam",
+                "--duration",
+                "30",
+                "--output",
+                str(tmp_path / "out.txt"),
+            ]
+        )
+
+
+def test_request_mode_does_not_require_typed_scheduling_flags(tmp_path):
+    args = parse_args(
+        [
+            "--input-dir",
+            str(tmp_path),
+            "--request",
+            "30 minutes with Sam and Priya next Tuesday afternoon",
+            "--output",
+            str(tmp_path / "out.txt"),
+        ]
+    )
+    assert args.request.startswith("30 minutes")
+    assert args.date is None
+    assert args.participants is None
+    assert args.duration is None
+
+
+def _mock_nl_parser(
+    monkeypatch,
+    *,
+    preference="afternoon",
+    meeting_date=None,
+    participants=None,
+    duration=30,
+):
+    from scheduler.nl_parser import ParsedSchedulingRequest
+
+    parsed = ParsedSchedulingRequest(
+        participants=["Sam", "Priya"] if participants is None else participants,
+        duration_minutes=duration,
+        meeting_date=meeting_date or date(2026, 10, 23),
+        time_preference=preference,
+    )
+    monkeypatch.setattr(
+        "scheduler.cli.parse_natural_language_request",
+        lambda *args, **kwargs: parsed,
+    )
+    return parsed
+
+
+def test_request_mode_writes_the_report_file(tmp_path, monkeypatch):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch)
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya next Tuesday afternoon",
+            "--output",
+            str(output),
+        ]
+    )
+    assert output.is_file()
+
+
+def test_request_mode_report_includes_the_parsed_date(tmp_path, monkeypatch):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch)
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya afternoon",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "Date: 2026-10-23" in output.read_text(encoding="utf-8")
+
+
+def test_request_mode_report_includes_the_parsed_participants(tmp_path, monkeypatch):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch)
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya afternoon",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "Participants: Sam, Priya" in output.read_text(encoding="utf-8")
+
+
+def test_request_mode_afternoon_preference_starts_at_noon(tmp_path, monkeypatch):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch, preference="afternoon")
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya afternoon",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "1. 12:00-12:30" in output.read_text(encoding="utf-8")
+
+
+def test_request_mode_morning_preference_starts_at_opening(tmp_path, monkeypatch):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch, preference="morning")
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya morning",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "1. 09:00-09:30" in output.read_text(encoding="utf-8")
+
+
+def test_request_mode_prints_the_parsed_summary(tmp_path, monkeypatch, capsys):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch)
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya afternoon",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "Parsed request:" in capsys.readouterr().out
+
+
+def test_request_mode_typed_date_overrides_parsed_date(tmp_path, monkeypatch):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch, meeting_date=date(2026, 10, 27))
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya",
+            "--date",
+            "2026-10-23",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "Date: 2026-10-23" in output.read_text(encoding="utf-8")
+
+
+def test_request_mode_typed_participants_override_parsed_names(tmp_path, monkeypatch):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    write_calendar(calendars, "Alex", free_day("Alex"))
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch, participants=["Sam", "Priya"])
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "meet Sam and Priya",
+            "--participants",
+            "Sam",
+            "Alex",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "Participants: Sam, Alex" in output.read_text(encoding="utf-8")
+
+
+def test_request_mode_typed_duration_overrides_parsed_duration(tmp_path, monkeypatch):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch, duration=30, preference=None)
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya",
+            "--duration",
+            "60",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "Duration: 60 minutes" in output.read_text(encoding="utf-8")
+
+
+def test_request_mode_runtime_error_exits_with_status_two(
+    tmp_path, monkeypatch, capsys
+):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    monkeypatch.setattr(
+        "scheduler.cli.parse_natural_language_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("Natural-language mode requires AZURE_OPENAI_API_KEY")
+        ),
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        main(
+            [
+                "--input-dir",
+                str(calendars),
+                "--request",
+                "30 minutes with Sam and Priya",
+                "--output",
+                str(tmp_path / "report.txt"),
+            ]
+        )
+
+    assert raised.value.code == 2
+
+
+def test_request_mode_runtime_error_prints_error_prefix(
+    tmp_path, monkeypatch, capsys
+):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    monkeypatch.setattr(
+        "scheduler.cli.parse_natural_language_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("Natural-language mode requires AZURE_OPENAI_API_KEY")
+        ),
+    )
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--input-dir",
+                str(calendars),
+                "--request",
+                "30 minutes with Sam and Priya",
+                "--output",
+                str(tmp_path / "report.txt"),
+            ]
+        )
+
+    assert "Error: Natural-language mode requires AZURE_OPENAI_API_KEY" in (
+        capsys.readouterr().err
+    )
+
+
+def test_request_mode_value_error_exits_with_status_two(
+    tmp_path, monkeypatch, capsys
+):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(calendars, "Sam", free_day("Sam"))
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    monkeypatch.setattr(
+        "scheduler.cli.parse_natural_language_request",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ValueError("No calendar found for participant Alex.")
+        ),
+    )
+
+    with pytest.raises(SystemExit) as raised:
+        main(
+            [
+                "--input-dir",
+                str(calendars),
+                "--request",
+                "meet Alex",
+                "--output",
+                str(tmp_path / "report.txt"),
+            ]
+        )
+
+    assert raised.value.code == 2
+
+
+def test_request_mode_skips_morning_when_calendars_are_busy_before_noon(
+    tmp_path, monkeypatch
+):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(
+        calendars,
+        "Sam",
+        [busy("Sam", "09:00", "12:00", "Morning block")],
+    )
+    write_calendar(
+        calendars,
+        "Priya",
+        [busy("Priya", "09:00", "12:00", "Morning block")],
+    )
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch, preference="afternoon")
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya afternoon",
+            "--output",
+            str(output),
+        ]
+    )
+    text = output.read_text(encoding="utf-8")
+    assert "1. 12:00-12:30" in text
+
+
+def test_request_mode_with_busy_mornings_omits_morning_slot_lines(
+    tmp_path, monkeypatch
+):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(
+        calendars,
+        "Sam",
+        [busy("Sam", "09:00", "12:00", "Morning block")],
+    )
+    write_calendar(
+        calendars,
+        "Priya",
+        [busy("Priya", "09:00", "12:00", "Morning block")],
+    )
+    output = tmp_path / "report.txt"
+    _mock_nl_parser(monkeypatch, preference="afternoon")
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya afternoon",
+            "--output",
+            str(output),
+        ]
+    )
+    suggested = output.read_text(encoding="utf-8").split("SUGGESTED MEETING TIMES", 1)[1]
+    assert "09:" not in suggested
+
+
+def test_help_mentions_natural_language_request(capsys):
+    with pytest.raises(SystemExit) as raised:
+        parse_args(["--help"])
+    assert raised.value.code == 0
+    assert "--request" in capsys.readouterr().out

@@ -1,0 +1,4 @@
+# Secrets — keep API keys out of Cursor / LLM context
+.env
+.env.*
+!.env.example

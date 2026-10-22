@@ -2,6 +2,9 @@
 
 Loads calendars, detects conflicts, finds shared free slots, and writes a report.
 Expected failures print Error: ... and exit with status 2.
+
+Typed flags are the default path and work without an API key. Optional
+--request uses an LLM only to convert natural language into those same fields.
 """
 
 from __future__ import annotations
@@ -14,6 +17,10 @@ from pathlib import Path
 from scheduler.conflicts import find_conflicts
 from scheduler.loaders import load_calendars
 from scheduler.models import Event
+from scheduler.nl_parser import (
+    filter_slots_by_time_preference,
+    parse_natural_language_request,
+)
 from scheduler.reporting import format_report, write_report
 from scheduler.rules import MinimumGapRule, WorkingHoursRule
 from scheduler.slot_finder import find_available_slots
@@ -24,7 +31,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     try:
         run(args)
-    except (ValueError, TypeError, OSError) as error:
+    except (ValueError, TypeError, OSError, RuntimeError) as error:
         print(f"Error: {error}", file=sys.stderr)
         raise SystemExit(2) from None
 
@@ -48,20 +55,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Agreed IANA time zone for zoned ICS import, e.g. America/New_York.",
     )
     parser.add_argument(
+        "--request",
+        help=(
+            "Natural-language scheduling request. Requires an API key. "
+            "When set, --date, --participants, and --duration are optional."
+        ),
+    )
+    parser.add_argument(
         "--date",
-        required=True,
         type=_parse_date,
         help="Requested meeting date as YYYY-MM-DD.",
     )
     parser.add_argument(
         "--participants",
-        required=True,
         nargs="+",
         help="Employees attending the meeting.",
     )
     parser.add_argument(
         "--duration",
-        required=True,
         type=_parse_duration,
         help="Meeting length in minutes.",
     )
@@ -70,7 +81,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Destination path for the generated report.",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    _validate_mode(args, parser)
+    return args
 
 
 def run(args: argparse.Namespace) -> None:
@@ -78,16 +91,19 @@ def run(args: argparse.Namespace) -> None:
     events, known_participants = _load_input_directory(
         Path(args.input_dir), local_timezone=args.timezone
     )
-    participants = list(dict.fromkeys(args.participants))
+    meeting_date, participants, duration, time_preference = _resolve_request(
+        args, known_participants
+    )
 
     slots = find_available_slots(
         events,
         participants,
-        args.date,
-        args.duration,
+        meeting_date,
+        duration,
         rules=[WorkingHoursRule(), MinimumGapRule()],
         known_participants=known_participants,
     )
+    slots = filter_slots_by_time_preference(slots, time_preference)
     selected = set(participants)
     conflicts = [
         conflict
@@ -95,14 +111,67 @@ def run(args: argparse.Namespace) -> None:
         if conflict.person in selected
     ]
     report = format_report(
-        args.date,
+        meeting_date,
         participants,
-        args.duration,
+        duration,
         conflicts,
         slots,
     )
     write_report(report, args.output)
     print(f"Report written to {args.output}")
+
+
+def _validate_mode(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if args.request:
+        return
+    missing = []
+    if args.date is None:
+        missing.append("--date")
+    if not args.participants:
+        missing.append("--participants")
+    if args.duration is None:
+        missing.append("--duration")
+    if missing:
+        parser.error(
+            "the following arguments are required unless --request is used: "
+            + ", ".join(missing)
+        )
+
+
+def _resolve_request(
+    args: argparse.Namespace, known_participants: set[str]
+) -> tuple[date, list[str], int, str | None]:
+    if not args.request:
+        return (
+            args.date,
+            list(dict.fromkeys(args.participants)),
+            args.duration,
+            None,
+        )
+
+    parsed = parse_natural_language_request(
+        args.request,
+        known_participants=known_participants,
+    )
+    participants = (
+        list(dict.fromkeys(args.participants))
+        if args.participants
+        else parsed.participants
+    )
+    meeting_date = args.date or parsed.meeting_date
+    duration = args.duration if args.duration is not None else parsed.duration_minutes
+    print(
+        "Parsed request: "
+        f"date={meeting_date.isoformat()}, "
+        f"participants={', '.join(participants)}, "
+        f"duration={duration} minutes"
+        + (
+            f", time_preference={parsed.time_preference}"
+            if parsed.time_preference
+            else ""
+        )
+    )
+    return meeting_date, participants, duration, parsed.time_preference
 
 
 def _parse_date(value: str) -> date:
