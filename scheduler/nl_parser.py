@@ -130,14 +130,6 @@ def _ask_model(
 
 
 def _build_client():
-    try:
-        from openai import OpenAI
-    except ImportError as error:
-        raise RuntimeError(
-            "The openai package is required for --request. "
-            "Install with: pip install -e \".[nl]\""
-        ) from error
-
     api_key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key or not api_key.strip() or api_key.strip() == "<your-api-key>":
         raise RuntimeError(
@@ -151,6 +143,15 @@ def _build_client():
             "or a local .env file."
         )
     _deployment_name()
+
+    try:
+        from openai import OpenAI
+    except ImportError as error:
+        raise RuntimeError(
+            "The openai package is required for --request. "
+            "Install with: pip install -e \".[nl]\""
+        ) from error
+
     return OpenAI(base_url=endpoint.strip().rstrip("/"), api_key=api_key.strip())
 
 
