@@ -326,3 +326,171 @@ def test_sample_conflict_day_includes_priya_overlap(tmp_path, sample_calendars):
         )
     )
     assert "Conflict: 10:30-11:00" in output.read_text(encoding="utf-8")
+
+
+def _mock_nl_for_sample(monkeypatch):
+    from scheduler.nl_parser import ParsedSchedulingRequest
+
+    monkeypatch.setattr(
+        "scheduler.cli.parse_natural_language_request",
+        lambda *args, **kwargs: ParsedSchedulingRequest(
+            participants=PARTICIPANTS,
+            duration_minutes=DURATION,
+            meeting_date=MEETING_DATE,
+            time_preference=None,
+        ),
+    )
+
+
+def test_nl_end_to_end_creates_report_from_sample_calendars(
+    tmp_path, sample_calendars, monkeypatch
+):
+    _mock_nl_for_sample(monkeypatch)
+    output = tmp_path / "nl_report.txt"
+    main(
+        [
+            "--input-dir",
+            str(sample_calendars),
+            "--request",
+            "30 minutes with Sam and Priya on 2026-10-20",
+            "--output",
+            str(output),
+        ]
+    )
+    assert output.is_file()
+
+
+def test_nl_end_to_end_report_matches_typed_engine_output(
+    tmp_path, sample_calendars, expected_report, monkeypatch
+):
+    _mock_nl_for_sample(monkeypatch)
+    output = tmp_path / "nl_report.txt"
+    main(
+        [
+            "--input-dir",
+            str(sample_calendars),
+            "--request",
+            "30 minutes with Sam and Priya on 2026-10-20",
+            "--output",
+            str(output),
+        ]
+    )
+    assert output.read_text(encoding="utf-8") == expected_report
+
+
+def test_nl_end_to_end_report_includes_first_shared_slot(
+    tmp_path, sample_calendars, monkeypatch
+):
+    _mock_nl_for_sample(monkeypatch)
+    output = tmp_path / "nl_report.txt"
+    main(
+        [
+            "--input-dir",
+            str(sample_calendars),
+            "--request",
+            "30 minutes with Sam and Priya on 2026-10-20",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "1. 10:00-10:30" in output.read_text(encoding="utf-8")
+
+
+def test_typed_cli_still_works_without_an_api_key(
+    tmp_path, sample_calendars, monkeypatch
+):
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    output = tmp_path / "typed_report.txt"
+    main(_cli_argv(sample_calendars, output))
+    assert output.is_file()
+
+
+def _write_ics(directory: Path, person: str, body: str) -> None:
+    (directory / f"{person.lower()}.ics").write_text(
+        "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Scheduler tests//EN\n"
+        + body
+        + "END:VCALENDAR\n",
+        encoding="utf-8",
+    )
+
+
+def test_nl_end_to_end_works_with_ics_only_calendars(tmp_path, monkeypatch):
+    from scheduler.nl_parser import ParsedSchedulingRequest
+
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    event = (
+        "BEGIN:VEVENT\nUID:sam-1\nSUMMARY:Standup\n"
+        "DTSTART:20261023T090000\nDTEND:20261023T093000\nEND:VEVENT\n"
+    )
+    _write_ics(calendars, "Sam", event)
+    _write_ics(
+        calendars,
+        "Priya",
+        "BEGIN:VEVENT\nUID:priya-1\nSUMMARY:Focus\n"
+        "DTSTART:20261023T100000\nDTEND:20261023T110000\nEND:VEVENT\n",
+    )
+    monkeypatch.setattr(
+        "scheduler.cli.parse_natural_language_request",
+        lambda *args, **kwargs: ParsedSchedulingRequest(
+            participants=["Sam", "Priya"],
+            duration_minutes=30,
+            meeting_date=date(2026, 10, 23),
+            time_preference=None,
+        ),
+    )
+    output = tmp_path / "ics_nl_report.txt"
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya on 2026-10-23",
+            "--output",
+            str(output),
+        ]
+    )
+    assert output.is_file()
+
+
+def test_nl_end_to_end_ics_report_includes_a_shared_slot(tmp_path, monkeypatch):
+    from scheduler.nl_parser import ParsedSchedulingRequest
+
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    _write_ics(
+        calendars,
+        "Sam",
+        "BEGIN:VEVENT\nUID:sam-1\nSUMMARY:Standup\n"
+        "DTSTART:20261023T090000\nDTEND:20261023T093000\nEND:VEVENT\n",
+    )
+    _write_ics(
+        calendars,
+        "Priya",
+        "BEGIN:VEVENT\nUID:priya-1\nSUMMARY:Focus\n"
+        "DTSTART:20261023T100000\nDTEND:20261023T110000\nEND:VEVENT\n",
+    )
+    monkeypatch.setattr(
+        "scheduler.cli.parse_natural_language_request",
+        lambda *args, **kwargs: ParsedSchedulingRequest(
+            participants=["Sam", "Priya"],
+            duration_minutes=30,
+            meeting_date=date(2026, 10, 23),
+            time_preference=None,
+        ),
+    )
+    output = tmp_path / "ics_nl_report.txt"
+
+    main(
+        [
+            "--input-dir",
+            str(calendars),
+            "--request",
+            "30 minutes with Sam and Priya on 2026-10-23",
+            "--output",
+            str(output),
+        ]
+    )
+    assert "1. 09:30-10:00" in output.read_text(encoding="utf-8")

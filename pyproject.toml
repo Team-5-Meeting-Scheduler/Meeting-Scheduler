@@ -8,6 +8,7 @@ dependencies = ["icalendar>=6,<8"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+nl = ["openai>=1.40", "python-dotenv>=1.0"]
 
 [project.scripts]
 meeting-scheduler = "scheduler.cli:main"

@@ -13,6 +13,7 @@ scheduler/          Package
   slot_finder.py    Available slot search                (Vedanshu)
   reporting.py      Report output                        (Vedanshu)
   cli.py            Command-line interface               (Vedanshu)
+  nl_parser.py      Natural-language request parsing     (Vedanshu)
   __main__.py       `python -m scheduler`                (Vedanshu)
 
 scripts/
@@ -89,3 +90,46 @@ they raise errors rather than silently omit busy time. Cancelled and transparent
 events are skipped. Folded lines, escaped text, multiple events, and empty
 calendars are supported. For files sharing a stem, the CLI prefers JSON, then
 CSV, then ICS, so alternate exports are not imported twice.
+
+## Natural-language requests (STRETCH-02)
+
+The typed CLI remains the default and works with no API key:
+
+```bash
+python -m scheduler \
+  --input-dir data/sample_calendars \
+  --date 2026-10-20 \
+  --participants Sam Priya \
+  --duration 30 \
+  --output reports/schedule.txt
+```
+
+Optional natural-language mode uses Azure OpenAI only to convert a sentence
+into structured fields (`participants`, `duration_minutes`, `date`,
+`time_preference`). Conflict detection and slot search still run in Python.
+
+Install the optional packages:
+
+```bash
+pip install -e ".[dev,nl]"
+```
+
+Copy `.env.example` to `.env` and fill in `AZURE_OPENAI_ENDPOINT`,
+`AZURE_OPENAI_DEPLOYMENT`, and `AZURE_OPENAI_API_KEY`. Do not commit `.env`.
+
+```bash
+cp .env.example .env
+```
+
+Then run:
+
+```bash
+python -m scheduler \
+  --input-dir data/sample_calendars \
+  --request "30 minutes with Sam and Priya next Tuesday afternoon" \
+  --output reports/schedule.txt
+```
+
+`morning` keeps slots before 12:00. `afternoon` keeps slots at 12:00 or later.
+Typed flags can still override values parsed from `--request`. Without
+`--request`, missing `--date`, `--participants`, or `--duration` is an error.
