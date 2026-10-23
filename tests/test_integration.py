@@ -4,7 +4,7 @@ import json
 import shutil
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 import pytest
@@ -83,10 +83,14 @@ def _build_report(events, meeting_date, participants, duration):
         known_participants=known,
     )
     selected = set(participants)
+    day_start = datetime.combine(meeting_date, time.min)
+    day_end = day_start + timedelta(days=1)
     conflicts = [
         conflict
         for conflict in find_conflicts(events)
         if conflict.person in selected
+        and conflict.overlap_start < day_end
+        and day_start < conflict.overlap_end
     ]
     return format_report(meeting_date, participants, duration, conflicts, slots)
 

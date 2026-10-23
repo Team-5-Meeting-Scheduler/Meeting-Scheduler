@@ -216,6 +216,85 @@ def test_report_includes_a_detected_conflict(tmp_path):
     assert "Conflict: 09:30-10:00" in output.read_text(encoding="utf-8")
 
 
+def on_day(
+    person: str, day: str, start: str, end: str, title: str = "Meeting"
+) -> dict:
+    return {
+        "person": person,
+        "title": title,
+        "start": f"{day}T{start}",
+        "end": f"{day}T{end}",
+    }
+
+
+def test_report_omits_a_conflict_from_another_day(tmp_path):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(
+        calendars,
+        "Sam",
+        [
+            on_day("Sam", "2026-10-20", "09:00", "10:00", "Standup"),
+            on_day("Sam", "2026-10-20", "09:30", "10:30", "Client"),
+        ],
+    )
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+
+    main(argv(calendars, output))
+
+    report = output.read_text(encoding="utf-8")
+    assert "Conflict: 09:30-10:00" not in report
+    assert "No calendar conflicts." in report
+
+
+def test_report_keeps_the_meeting_day_conflict_and_drops_the_others(tmp_path):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(
+        calendars,
+        "Sam",
+        [
+            on_day("Sam", "2026-10-20", "09:00", "10:00", "Old Standup"),
+            on_day("Sam", "2026-10-20", "09:30", "10:30", "Old Client"),
+            on_day("Sam", "2026-10-23", "14:00", "15:00", "Review"),
+            on_day("Sam", "2026-10-23", "14:30", "15:30", "One-on-one"),
+        ],
+    )
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+
+    main(argv(calendars, output))
+
+    report = output.read_text(encoding="utf-8")
+    assert "Conflict: 14:30-15:00" in report
+    assert "Conflict: 09:30-10:00" not in report
+
+
+def test_report_omits_a_conflict_that_ends_at_the_meeting_day_midnight(tmp_path):
+    calendars = tmp_path / "calendars"
+    calendars.mkdir()
+    write_calendar(
+        calendars,
+        "Sam",
+        [
+            on_day("Sam", "2026-10-22", "22:00", "23:59", "Late Call"),
+            {
+                "person": "Sam",
+                "title": "Overnight Run",
+                "start": "2026-10-22T23:00:00",
+                "end": "2026-10-23T00:00:00",
+            },
+        ],
+    )
+    write_calendar(calendars, "Priya", free_day("Priya"))
+    output = tmp_path / "report.txt"
+
+    main(argv(calendars, output))
+
+    assert "No calendar conflicts." in output.read_text(encoding="utf-8")
+
+
 def test_main_rejects_a_missing_input_directory(tmp_path, capsys):
     missing = tmp_path / "missing"
     output = tmp_path / "report.txt"

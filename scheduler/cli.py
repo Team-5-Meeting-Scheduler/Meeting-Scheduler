@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
-from scheduler.conflicts import find_conflicts
+from scheduler.conflicts import Conflict, find_conflicts
 from scheduler.loaders import load_calendars
 from scheduler.models import Event
 from scheduler.nl_parser import (
@@ -109,6 +109,7 @@ def run(args: argparse.Namespace) -> None:
         conflict
         for conflict in find_conflicts(events)
         if conflict.person in selected
+        and _overlaps_date(conflict, meeting_date)
     ]
     report = format_report(
         meeting_date,
@@ -120,6 +121,19 @@ def run(args: argparse.Namespace) -> None:
     write_report(report, args.output)
     print(report, end="")
     print(f"Report written to {args.output}")
+
+
+def _overlaps_date(conflict: Conflict, meeting_date: date) -> bool:
+    """Return whether a conflict's overlap window falls on the meeting date.
+
+    The report covers one day, so a clash on another day is not the office
+    manager's concern here. Intervals are half-open [start, end), matching the
+    rest of the tool: an overlap ending exactly at midnight belongs to the day
+    before.
+    """
+    day_start = datetime.combine(meeting_date, time.min)
+    day_end = day_start + timedelta(days=1)
+    return conflict.overlap_start < day_end and day_start < conflict.overlap_end
 
 
 def _validate_mode(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:

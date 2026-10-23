@@ -154,6 +154,8 @@ then CSV, then ICS**, so a person is not imported twice.
 - Default scheduling rules:
   - `WorkingHoursRule` — slot must fit inside 09:00–17:00
   - `MinimumGapRule(0)` — no required buffer; back-to-back is allowed
+- Reported conflicts are limited to the requested participants **on the
+  requested date**; a clash on another day is left out of that day's report
 
 Timezone-aware values are rejected by the `Event` model. Zoned ICS timestamps
 are converted with `--timezone` (IANA name such as `America/New_York`) and
